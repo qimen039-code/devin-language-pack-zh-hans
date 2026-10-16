@@ -47,17 +47,26 @@ license information.
 `webapp/` 是本仓库的**第二个交付物**，与 `translations/` 的语言包相互独立，
 且**不被打进 VSIX**（`build/build.mjs` 已将其列入排除表）。
 
-它解决的是语言包**结构上够不到**的一层：Devin Desktop 的 Sessions / Settings 界面
-其实是 `https://app.devin.ai` 这个远程 Web 应用在沙箱 iframe 里渲染的，
-字符串不在 VS Code 的 nls 键表里。构造该 iframe 的代码在安装树里存在**两份
-彼此独立的副本**（`sessions.desktop.main.js` 与 `workbench.desktop.main.js`），
-补丁需同时覆盖两者。
+它解决的是语言包**结构上够不到**的两层界面：
+
+1. **远程渲染的网页** —— Devin Desktop 的 Sessions / Settings 界面其实是
+   `https://app.devin.ai` 这个远程 Web 应用在沙箱 iframe 里渲染的，字符串不在
+   VS Code 的 nls 键表里。构造该 iframe 的代码在安装树里存在**两份彼此独立的副本**
+   （`sessions.desktop.main.js` 与 `workbench.desktop.main.js`），补丁需同时覆盖两者。
+2. **随安装包发布的 chat 前端自带的英文目录** —— 导航栏、本地设置页等文案来自
+   `vs/workbench/windsurf-chat-client/index.js` 内联的 i18next 资源（同一份目录也
+   内联进 `sessions.desktop.main.js`）。`lng` / `fallbackLng` 写死 `"en"`，语言包的
+   `translationsConfigFile` 注入点只赋值不被消费，因此也只能在字节层替换。
+
+第 2 层是**本地文件直改，不需要任何常驻进程或网络访问**。
 
 | 路径 | 说明 |
 | --- | --- |
 | `webapp/proxy.mjs` | 回环反向代理，**本项目完全自写**，零第三方依赖 |
 | `webapp/warmup-all.mjs` | 资源图闭包式预热脚本，**本项目完全自写** |
 | `webapp/install.py`、`webapp/uninstall.py` | 字节级补丁 / 还原脚本，**本项目完全自写** |
+| `webapp/test-install.py` | 安装器的离线自测（合成应用树），**本项目完全自写** |
+| `webapp/make-fixture.mjs`、`webapp/test-proxy.mjs` | 代理的离线自测，**本项目完全自写** |
 | `webapp/dict-zh.json` | 本项目的**人工译源** |
 | `webapp/zh-hans.json` | 构建产物：`{ key: { en, zh } }` |
 | `build/webapp-dict.mjs` | 由译源 + 英文原文生成词表的构建脚本 |

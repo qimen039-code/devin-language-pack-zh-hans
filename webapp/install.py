@@ -1,24 +1,39 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Install the Devin webapp zh-hans overlay.
+"""Install the Devin zh-hans overlay.
 
-Devin Desktop renders its Sessions / Settings UI inside a sandboxed iframe that
-loads the remote web app (https://app.devin.ai).  The iframe injector lives in
-TWO bundles, and each carries its own copy of the URL builder plus its own copy
-of the install-host resolver:
+Two independent layers are patched here.
 
-    out/vs/sessions/sessions.desktop.main.js
-        V6r(But(this._authService,this._devinService), ...)     x2
-        V6r = URL builder      But = webappHost/webUrl resolver
+Layer 1 - the remote web app's iframe base URL
+    Devin Desktop can render its Sessions / Settings UI in a frame that loads the
+    remote web app (https://app.devin.ai).  The injector lives in TWO bundles, and
+    each carries its own copy of the URL builder plus its own copy of the
+    install-host resolver:
 
-    out/vs/workbench/workbench.desktop.main.js
-        oSe(QC(this._authService,this._devinService), ...)      x2   (desktop nav)
-        oSe(this._devinService.webUrl, ...)                     x1   (Devin Sidebar)
-        oSe = URL builder      QC  = webappHost/webUrl resolver
+        out/vs/sessions/sessions.desktop.main.js
+            V6r(But(this._authService,this._devinService), ...)     x2
+            V6r = URL builder      But = webappHost/webUrl resolver
 
-Both are rewritten so the iframe loads from the local proxy instead of the
-remote origin.  Edits are byte-level: the file is never decoded, so no encoding
-can be damaged.
+        out/vs/workbench/workbench.desktop.main.js
+            oSe(QC(this._authService,this._devinService), ...)      x2   (desktop nav)
+            oSe(this._devinService.webUrl, ...)                     x1   (Devin Sidebar)
+            oSe = URL builder      QC  = webappHost/webUrl resolver
+
+    Both are rewritten so the frame loads from the local proxy instead of the
+    remote origin.
+
+Layer 2 - the shipped chat client's own English catalogue
+    The built chat client embeds its i18next resources outright:
+
+        Ua.init({ resources: { en: { translation: jr } }, lng: "en", fallbackLng: "en" })
+
+    `jr` is a plain {"camelCaseKey":"English"} map (the same catalogue is inlined
+    into the sessions window bundle), so translating it is a byte-level pair swap
+    - no resident proxy, no network, no runtime.  Keys are unique identifiers,
+    which keeps the substitution unambiguous.
+
+Edits are byte-level throughout: files are never decoded, so no encoding can be
+damaged.
 
     python webapp/install.py --app "<devin-install-dir>" [--port 5175] [--dry-run]
     python webapp/install.py --status
@@ -34,14 +49,33 @@ import os
 import shutil
 import sys
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+
 # Relative to <app>/resources/app/out/
 SESSIONS_KEY = "vs/sessions/sessions.desktop.main.js"
 WORKBENCH_KEY = "vs/workbench/workbench.desktop.main.js"
+CHATUI_KEY = "vs/workbench/windsurf-chat-client/index.js"
 PRODUCT = os.path.join("resources", "app", "product.json")
 OUT_PREFIX = os.path.join("resources", "app", "out")
 ORIG_SUFFIX = ".zh-orig"
 STATE = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
                      "Devin", "zh-webapp.json")
+
+# Translation source for layer 2 (built from webapp/dict-zh.json).
+CHATUI_DICT = os.path.join(HERE, "zh-hans.json")
+
+# English this install ships for the few keys whose catalogue text differs from
+# the remote one.  Kept explicit rather than sniffed from the bundle so the edit
+# set stays a pure function of the dictionary and --status stays meaningful.
+CHATUI_EN_ALIASES = {
+    "codeSessions": ["Code sessions"],
+    "coding": ["Coding"],
+    "allowModelProviderDataRetentionDisabledDescription": [
+        "Disabling this setting disables all routing to Fable-family models, "
+        "and also disables Devin Ultra mode.",
+    ],
+}
+
 
 # The probe file used to decide whether a directory is a Devin install.
 PROBE = os.path.join(OUT_PREFIX, SESSIONS_KEY)
@@ -55,31 +89,99 @@ CANDIDATES = [
 ]
 
 
+def _pair(key, text):
+    """`<key>:<value>` exactly as the bundle stores it, ASCII-only.
+
+    Non-ASCII is emitted as \\uXXXX escapes to match the catalogue's own
+    convention (its Japanese copy is escaped the same way).  That keeps the
+    edited bundle pure ASCII, so no charset assumption can corrupt the strings
+    when the file is loaded over the custom file protocol.
+    """
+    return (json.dumps(key, ensure_ascii=True) + ":"
+            + json.dumps(text, ensure_ascii=True))
+
+
+_chatui_cache = []
+
+
+def chatui_edits():
+    """[(pattern_bytes, replacement_str, None)] - one pair swap per dictionary key.
+
+    `expect` is None: this set spans a whole catalogue, so what matters is that
+    no English original is left behind, not how many swaps were made.
+    """
+    if _chatui_cache:
+        return _chatui_cache
+    try:
+        with io.open(CHATUI_DICT, encoding="utf-8") as fh:
+            raw = json.load(fh)
+    except (OSError, ValueError) as e:
+        print("WARN: cannot read %s (%s); chat UI strings will stay English."
+              % (CHATUI_DICT, e))
+        return _chatui_cache
+    seen = set()
+    for key, val in sorted(raw.items()):
+        if key.startswith("_") or not isinstance(val, dict):
+            continue
+        zh = val.get("zh")
+        if not zh:
+            continue
+        # A key whose Chinese equals its English (brand names, "Devin Desktop",
+        # "Wiki") is already correct and produces no edit at all.
+        rep = _pair(key, zh)
+        rep_b = rep.encode("ascii")
+        for en in [val.get("en")] + CHATUI_EN_ALIASES.get(key, []):
+            if not en or en == zh:
+                continue
+            # The catalogue sits inside single-quoted JS strings, so an
+            # apostrophe is stored escaped; try both spellings.  De-duplicate by
+            # pattern, not by key: one key may legitimately need several
+            # spellings (dictionary text + local alias).
+            for text in (en, en.replace("'", "\\'")):
+                pat = _pair(key, text).encode("ascii")
+                if pat == rep_b or pat in seen:
+                    continue
+                seen.add(pat)
+                _chatui_cache.append((pat, rep, None))
+    return _chatui_cache
+
+
 def build_targets(port):
-    """(checksum key, [edits]) per bundle.  Each edit is (pattern, replacement, expect).
+    """[{key, edits}] - one entry per bundle, edits merged across every concern.
+
+    Each edit is (pattern, replacement, expect); `expect` may be None, meaning
+    "no fixed occurrence count".
 
     The PR-review webview (`oSe(this.devinService.webUrl, ...)`, no underscore)
     is deliberately NOT patched: it authenticates with per-origin request headers
     pinned to the app origin, so moving its base would break its auth.
+
+    out/vs/workbench/workbench.desktop.main.js is not touched by layer 2 - it
+    carries none of the catalogue.
     """
-    return [
-        {
-            "key": SESSIONS_KEY,
-            "edits": [
-                (b"V6r(But(this._authService,this._devinService),",
-                 'V6r("http://127.0.0.1:%d",' % port, 2),
-            ],
-        },
-        {
-            "key": WORKBENCH_KEY,
-            "edits": [
-                (b"oSe(QC(this._authService,this._devinService),",
-                 'oSe("http://127.0.0.1:%d",' % port, 2),
-                (b"oSe(this._devinService.webUrl,",
-                 'oSe("http://127.0.0.1:%d",' % port, 1),
-            ],
-        },
-    ]
+    groups = {}
+
+    def add(key, edits):
+        groups.setdefault(key, []).extend(edits)
+
+    # Layer 1 - point the web-app frame at the local proxy.
+    add(SESSIONS_KEY, [
+        (b"V6r(But(this._authService,this._devinService),",
+         'V6r("http://127.0.0.1:%d",' % port, 2),
+    ])
+    add(WORKBENCH_KEY, [
+        (b"oSe(QC(this._authService,this._devinService),",
+         'oSe("http://127.0.0.1:%d",' % port, 2),
+        (b"oSe(this._devinService.webUrl,",
+         'oSe("http://127.0.0.1:%d",' % port, 1),
+    ])
+
+    # Layer 2 - translate the shipped catalogue itself.  Present in both the chat
+    # client bundle and the sessions window bundle.
+    for key in (CHATUI_KEY, SESSIONS_KEY):
+        add(key, chatui_edits())
+
+    return [{"key": k, "edits": v} for k, v in groups.items()]
 
 
 def _registry_candidates():
@@ -123,6 +225,11 @@ def _registry_candidates():
 def b64_sha256(data):
     """base64(SHA-256) without padding - matches product.json's checksum style."""
     return base64.b64encode(hashlib.sha256(data).digest()).decode("ascii").rstrip("=")
+
+
+def digest_file(path):
+    with open(path, "rb") as fh:
+        return b64_sha256(fh.read())
 
 
 def read_checksum(product_path, key):
@@ -181,6 +288,26 @@ def patch_product_checksum(product_path, key, new_digest, dry_run):
             fh.write(raw)
         return old, "verify failed, restored"
     return old, "updated"
+
+
+def record_original(orig_digests, path, key):
+    """Pin original_checksums[key] to the digest of the factory backup.
+
+    The factory digest is *defined* as the digest of the factory image, and the
+    backup is that image.  Reading it out of product.json instead only works on
+    a first-ever install: on any later run product.json already carries a
+    patched digest, so storing that would make the field mean "whatever the file
+    happened to hash to", which tells uninstall nothing.  The backup is the
+    authority, and a stale value is repaired here.
+    """
+    backup = path + ORIG_SUFFIX
+    if not os.path.exists(backup):
+        return False
+    want = digest_file(backup)
+    if orig_digests.get(key) != want:
+        orig_digests[key] = want
+        return True
+    return False
 
 
 def load_state():
@@ -250,21 +377,72 @@ def apply_edits(data, edits):
 
 
 def expectations(edits):
-    """De-duplicated {replacement_bytes: expected total}.
+    """De-duplicated {replacement_bytes: expected total} for edits that carry a count.
 
     Several edits can share one replacement string (both workbench hosts are
     rewritten to the same literal), so counting per edit double-counts.  Counting
-    per distinct replacement is the honest number.
+    per distinct replacement is the honest number.  Edits with expect=None (the
+    catalogue pairs) are excluded: their count is not knowable up front.
     """
     exp = {}
     for _pattern, replacement, expect in edits:
+        if expect is None:
+            continue
         rep = replacement.encode("ascii")
         exp[rep] = exp.get(rep, 0) + expect
     return exp
 
 
-def count_applied(data, edits):
+def all_replacements(edits):
+    """Every distinct replacement, including the ones with no fixed count."""
+    return {e[1].encode("ascii") for e in edits}
+
+
+def count_fixed(data, edits):
+    """Occurrences of the fixed-count replacements (unit: occurrences)."""
     return sum(data.count(rep) for rep in expectations(edits))
+
+
+def count_swaps(rows):
+    """Occurrences actually swapped, across every edit (unit: occurrences)."""
+    return sum(n for _pattern, n, _expect in rows)
+
+
+def catalogue_stats(data, edits):
+    """(keys_landed, keys_total, occurrences) for the expect=None half.
+
+    Counted per *distinct replacement* - i.e. per dictionary key - not per
+    pattern.  A key can need several patterns, because the shipped catalogue
+    spells its English differently in different places, and inferring "pattern
+    landed" from "replacement present" credits every spelling of a key as soon
+    as any one of them lands (that inflated this line to 35 when only 32 keys
+    had actually gone in).  Occurrences are reported separately, because the
+    catalogue is inlined into the bundle several times: `"review":"..."` alone
+    lands 29 times in the live install.
+
+    Must be handed the *patched* bytes: a key has landed iff its Chinese
+    replacement is now present.
+    """
+    reps = {rep.encode("ascii") for _p, rep, _e in edits if _e is None}
+    hit = sum(1 for rep in reps if data.count(rep))
+    occ = sum(data.count(rep) for rep in reps)
+    return hit, len(reps), occ
+
+
+def catalogue_rows(rows, edits):
+    """catalogue_stats' three numbers from apply_edits' per-pattern hit counts.
+
+    Preferred while a patch is being written, so the figure is measured rather
+    than inferred from the bytes.  De-duplicated by replacement, matching
+    catalogue_stats() - see there for why the unit is the key, not the pattern.
+    """
+    hit_of = {pat: n for pat, n, _e in rows}
+    reps = {}
+    for pat, rep, expect in edits:
+        if expect is None:
+            reps[rep] = reps.get(rep, 0) + hit_of.get(pat, 0)
+    hit = sum(1 for n in reps.values() if n)
+    return hit, len(reps), sum(reps.values())
 
 
 def report_status(app, port):
@@ -275,6 +453,7 @@ def report_status(app, port):
     for t in targets:
         path = bundle_path(app, t["key"])
         expect_total = sum(expectations(t["edits"]).values())
+        n_derived = sum(1 for e in t["edits"] if e[2] is None)
         print("--- %s" % t["key"])
         if not os.path.isfile(path):
             print("    missing   : file not found")
@@ -283,12 +462,18 @@ def report_status(app, port):
         with open(path, "rb") as fh:
             data = fh.read()
         remaining = sum(data.count(e[0]) for e in t["edits"])
-        applied = count_applied(data, t["edits"])
-        # Several edits share one replacement string, so both `applied` and
-        # `expect_total` count distinct replacements, not edits.
         print("    bytes     : %d" % len(data))
         print("    original  : %d left" % remaining)
-        print("    patched   : %d / %d" % (applied, expect_total))
+        if n_derived:
+            hit, total, occ = catalogue_stats(data, t["edits"])
+            print("    catalogue : %d / %d keys landed, %d occurrences"
+                  % (hit, total, occ))
+            if hit < total:
+                print("                (%d dictionary key(s) absent from this bundle)"
+                      % (total - hit))
+        if expect_total:
+            print("    fixed     : %d / %d occurrences"
+                  % (count_fixed(data, t["edits"]), expect_total))
         print("    backup    : %s" % ("present" if os.path.exists(path + ORIG_SUFFIX) else "absent"))
         if os.path.isfile(product):
             val, err = read_checksum(product, t["key"])
@@ -302,6 +487,8 @@ def report_status(app, port):
                     ok_all = False
         else:
             print("    checksum  : product.json missing")
+            ok_all = False
+        if remaining:
             ok_all = False
     print("state file   : %s" % ("present" if os.path.exists(STATE) else "absent"))
     print("verdict      : %s" % ("INSTALLED" if ok_all else "NOT INSTALLED / INCOMPLETE"))
@@ -342,24 +529,35 @@ def main():
             data = fh.read()
         size_before = len(data)
         patched, rows = apply_edits(data, t["edits"])
-        hits = sum(r[1] for r in rows)
+        hits = count_swaps(rows)
         for pattern, n, expect in rows:
+            if expect is None:
+                continue
             flag = "" if n == expect else "   <-- expected %d" % expect
             print("    %-52s %d%s" % (pattern.decode("ascii"), n, flag))
+        pairs_hit, pairs_total, pairs_occ = catalogue_rows(rows, t["edits"])
+        if pairs_total:
+            print("    %-52s %d / %d keys landed, %d occurrences"
+                  % ("catalogue", pairs_hit, pairs_total, pairs_occ))
         any_hits += hits
         results.append((t, path, data, patched, rows, hits, size_before, expect_total))
 
     if not any_hits:
         print("OK: already installed (no change).")
-        if not args.dry_run and os.path.isfile(product):
-            for t in targets:
-                path = bundle_path(app, t["key"])
-                with open(path, "rb") as fh:
-                    cur = fh.read()
+        orig_digests = dict(load_state().get("original_checksums") or {})
+        for t in targets:
+            path = bundle_path(app, t["key"])
+            with open(path, "rb") as fh:
+                cur = fh.read()
+            if not args.dry_run and os.path.isfile(product):
                 old, note = patch_product_checksum(product, t["key"], b64_sha256(cur), False)
                 print("    checksum %-44s %s" % (t["key"], note))
+            if record_original(orig_digests, path, t["key"]):
+                print("    original: recorded factory digest %s"
+                      % orig_digests[t["key"]][:16])
         state = load_state()
-        state.update({"app": app, "port": args.port, "installed": True})
+        state.update({"app": app, "port": args.port, "installed": True,
+                      "original_checksums": orig_digests})
         save_state(state)
         return 0
 
@@ -373,26 +571,36 @@ def main():
     installed = []
     orig_digests = dict(load_state().get("original_checksums") or {})
     for t, path, data, patched, rows, hits, size_before, expect_total in results:
-        # Snapshot the shipped digest before touching anything, so uninstall can
-        # prove it restored the right table.
-        if os.path.isfile(product) and t["key"] not in orig_digests:
-            val, err = read_checksum(product, t["key"])
-            if not err and val:
-                orig_digests[t["key"]] = val
-
         if not hits:
             # Keep the checksum honest even for a file we did not touch.
             with open(path, "rb") as fh:
                 cur = fh.read()
             if os.path.isfile(product):
                 patch_product_checksum(product, t["key"], b64_sha256(cur), False)
+            if record_original(orig_digests, path, t["key"]):
+                print("    original: recorded factory digest %s"
+                      % orig_digests[t["key"]][:16])
             installed.append(t["key"])
             continue
 
         backup = path + ORIG_SUFFIX
-        # Always refresh: after a Devin update the byte image changes, and a
-        # stale backup would restore the wrong build on uninstall.
-        shutil.copy2(path, backup)
+        # Refresh the backup only when this file is still pristine upstream.
+        # Unconditionally copying would capture an already-patched file as
+        # "original" whenever a *new* edit set is applied to a file an earlier
+        # run already touched (exactly what happens to the sessions bundle when
+        # layer 1 is live and layer 2 arrives), and uninstall would then restore
+        # the patched bytes as if they were factory.
+        already_touched = any(data.count(rep) for rep in all_replacements(t["edits"]))
+        if not already_touched or not os.path.exists(backup):
+            shutil.copy2(path, backup)
+        else:
+            print("    backup  : kept existing .zh-orig (file already patched)")
+
+        # The factory digest comes from the backup, not from product.json - see
+        # record_original() for why reading product.json here is wrong.
+        if record_original(orig_digests, path, t["key"]):
+            print("    original: recorded factory digest %s"
+                  % orig_digests[t["key"]][:16])
 
         with open(path, "wb") as fh:
             fh.write(patched)
@@ -400,10 +608,10 @@ def main():
         with open(path, "rb") as fh:
             check = fh.read()
         still_original = sum(check.count(e[0]) for e in t["edits"])
-        now_applied = count_applied(check, t["edits"])
-        ok = still_original == 0 and now_applied >= expect_total
-        print("    write %-44s verify=%s (%d applied, delta %+d)"
-              % (t["key"], "PASS" if ok else "FAIL", now_applied, len(check) - size_before))
+        fixed_now = count_fixed(check, t["edits"])
+        ok = still_original == 0 and fixed_now >= expect_total
+        print("    write %-44s verify=%s (%d occurrences, delta %+d)"
+              % (t["key"], "PASS" if ok else "FAIL", hits, len(check) - size_before))
         if not ok:
             print("    restoring from backup")
             shutil.copy2(backup, path)

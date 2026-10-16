@@ -20,6 +20,7 @@ from install import (  # noqa: WPS433 - sibling script, run from the repo
     b64_sha256,
     build_targets,
     bundle_path,
+    expectations,
     load_state,
     patch_product_checksum,
     read_checksum,
@@ -52,7 +53,11 @@ def main():
 
     for t in targets:
         path = bundle_path(app, t["key"])
-        expect_total = sum(e[2] for e in t["edits"])
+        # Only the fixed-count edits carry a number; the catalogue edits store
+        # None (their occurrence count is only knowable from the bytes).  Summing
+        # e[2] across every edit would be 0 + None -> TypeError, so take the
+        # common expectations() view instead.
+        expect_total = sum(expectations(t["edits"]).values())
         backup = path + ORIG_SUFFIX
         print("--- %s" % t["key"])
 

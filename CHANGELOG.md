@@ -34,6 +34,53 @@ Devin Desktop 的 Sessions / Settings 界面并非本地渲染，而是把
   `build/webapp-dict.mjs`。
 - `/__zh/health`、`/__zh/keys` 诊断端点；`install.py --status`。
 
+### 第二层：本地目录直改（同版本内追加，不涉及版本号变更）
+
+第 1 层做完后，"补丁明明在位、界面还是英文"。进一步定位发现界面来源其实是**两个不同的地方**：
+
+| 层 | 界面 | 机制 | 需要常驻代理 |
+| --- | --- | --- | --- |
+| 1 | 远程渲染的 Sessions / Settings 网页 | 改写 iframe 基址 → 反向代理替换 | 是 |
+| 2 | **随安装包发布的 chat 前端自带英文目录**（导航栏、本地设置页等） | 字节级 `en → zh` 键值对替换 | **否** |
+
+第 2 层的载体是 `out/vs/workbench/windsurf-chat-client/index.js`（同一份目录也内联进
+`out/vs/sessions/sessions.desktop.main.js`）：
+
+```js
+Ua.use(UW).init({ resources: { en: { translation: jr } },
+                  lng: "en", fallbackLng: "en",
+                  ns: ["translation", "review"], defaultNS: "translation" })
+```
+
+`lng` / `fallbackLng` 写死 `"en"`，上游只带 en / ja / es / pt，语言包的
+`translationsConfigFile` 注入点只赋值不被消费 —— **架构上接不进去**，只能在字节层换目录。
+
+- 新增 `install.py` 的第二层编辑集：按 `<key>":"<English>"` 精确配对替换，
+  中文按 `\uXXXX` 转义写回（与上游自带的日文副本同形式），被编辑区间只含 ASCII。
+- **实测覆盖度**：`32 / 41 keys landed, 96 occurrences`。96 次替换落在 32 个字典键上、
+  由 41 个 pattern 表达（一个键可能有多种英文拼法；目录在 bundle 里被重复内联，
+  仅 `"review"` 一个键就落 29 次）。9 个键不在这个 bundle 里，归第 1 层管。
+- 新增**可随仓库分发的离线自测** `webapp/test-install.py`：自建合成应用树，
+  覆盖重复键 / 别名拼法 / `en == zh` 不生成编辑 / `{{product}}` 占位符 /
+  PR-review 诱饵不得被改写 / 字节增量守恒 / 装→卸→装逐字节可复现。**ALL PASS**。
+
+同时修掉四个在这一轮才暴露出来的问题（都不是"看起来不对"，是会真的出错或误导）：
+
+- **`uninstall.py` 会直接崩溃**：`sum(e[2] for e in t["edits"])` 遇到第二层的
+  `expect=None` 会求 `0 + None` → `TypeError`。也就是说加了第二层之后，
+  **卸载路径是完全不可用的**。改为走 `expectations()` 视图（已由闭环测试覆盖）。
+- **`--status` 的目录计数虚高**（与前一轮那个"逐 edit 重复计数"是**两个不同成因**）：
+  新的计数改成按替换串去重之后，`--status` 仍只能靠"替换串在不在"反推命中，
+  于是同一键的多种英文拼法会一起被记为命中 —— 虚报成 `35 / 41`。改为按
+  **字典键**（去重后的替换串）计数，与安装输出的 `32 / 41` 统一。
+- **`original_checksums` 记的不是出厂摘要**：它原先从 `product.json` 读取，
+  而非首次安装时 `product.json` 早已是打过补丁的值，于是记下的是"文件碰巧的哈希"，
+  对卸载毫无意义。改为从 `.zh-orig` 备份推导（备份即出厂镜像），并顺带修复陈旧值。
+- **bundle 的 `.zh-orig` 备份可能被污染**（与前一轮那个 **`product.json`** 备份是
+  两处不同的备份）：无条件刷新会在"给已打补丁的文件追加新编辑集"时把"已打补丁"
+  存成"原版"，卸载就回不到出厂态 —— `sessions` 正好是这条路径（第 1 层先落地，
+  第 2 层后到）。改为**仅在文件仍是出厂态时才刷新备份**，否则保留既有备份并提示。
+
 ### 根因修正（本轮追加）
 
 初版只改了 `out/vs/sessions/sessions.desktop.main.js` 的 2 处调用点，实测**界面仍为英文**。
