@@ -146,11 +146,20 @@ node build/webapp-dict.mjs <harvested-pairs.json> webapp/zh-hans.json
 | --- | --- |
 | `/__zh/health` | 词表条数、缓存目录、请求/改写计数 |
 | `/__zh/keys` | 逐键命中次数；未命中键分为「裸文本」/「完全不存在」两类 |
+| `/__zh/recent` | 最近 80 条**被代理的实际请求**（method + 路径，**去查询串**、不含任何头部） |
 
 ```bash
 curl -s http://127.0.0.1:5175/__zh/health
 curl -s http://127.0.0.1:5175/__zh/keys
+curl -s http://127.0.0.1:5175/__zh/recent
 ```
+
+**计数口径**：`stats.requests` 只统计**其它进程**发来的请求。`/__zh/*` 诊断端点
+是本进程自己的，另计为 `stats.diag` —— 否则一次 `health` 轮询就能把
+`requests` 推高，造成「Devin 正在使用代理」的假象。
+
+回答「Devin 到底有没有调用代理」只用两个不自我污染的指标：
+`stats.requests`（应为 0 或在 Devin 启动后跳增）与 `/__zh/recent` 的路径列表。
 
 `/__zh/keys` 读的是**缓存里的上游原文**，不是改写后的结果，因此报告不会被自己的
 替换结果污染 —— 这是缓存必须存原文、只有服务时才改写的原因。

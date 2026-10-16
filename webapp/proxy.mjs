@@ -317,7 +317,23 @@ function forwardHeaders(src) {
   return out;
 }
 
-const stats = { requests: 0, cacheHits: 0, upstream: 0, rewrites: 0, rewrittenAssets: 0, errors: 0 };
+// `requests` counts only traffic that some *other* process sent us.  The
+// /__zh/* diagnostic endpoints are our own; folding them into `requests` made
+// the counter climb from a mere health poll and produced a false "the app is
+// using the proxy" reading. They get their own counter.
+const stats = { requests: 0, diag: 0, cacheHits: 0, upstream: 0, rewrites: 0, rewrittenAssets: 0, errors: 0 };
+
+// Ring buffer of recent paths so a single run answers "what did the app fetch?".
+// Path only - never the query string (it can carry tokens), never headers.
+const RECENT = [];
+const RECENT_MAX = 80;
+
+function track(req, res, urlPath) {
+  const rec = { t: new Date().toISOString(), m: req.method, p: urlPath };
+  RECENT.push(rec);
+  if (RECENT.length > RECENT_MAX) RECENT.splice(0, RECENT.length - RECENT_MAX);
+  res.once('finish', () => { rec.s = res.statusCode; });
+}
 
 // --------------------------------------------------------------------- server
 
@@ -394,8 +410,14 @@ async function handleAsset(req, res, urlPath) {
 }
 
 const server = http.createServer((req, res) => {
-  stats.requests++;
   const url = req.url || '/';
+
+  if (url.startsWith('/__zh/')) {
+    stats.diag++;
+  } else {
+    stats.requests++;
+    track(req, res, url.split('?')[0]);
+  }
 
   if (url.startsWith('/__zh/health')) {
     send(res, 200, { 'content-type': 'application/json' }, JSON.stringify({
@@ -413,6 +435,15 @@ const server = http.createServer((req, res) => {
     } catch (e) {
       send(res, 500, { 'content-type': 'application/json' }, JSON.stringify({ error: e.message }));
     }
+    return;
+  }
+
+  // "Did anything actually call us, and for what?" - answered without reading
+  // any request headers or query strings.
+  if (url.startsWith('/__zh/recent')) {
+    send(res, 200, { 'content-type': 'application/json' }, JSON.stringify({
+      stats, count: RECENT.length, recent: RECENT,
+    }, null, 2));
     return;
   }
 
