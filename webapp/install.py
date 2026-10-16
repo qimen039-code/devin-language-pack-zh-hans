@@ -6,7 +6,7 @@ Patches the Devin Desktop sessions bundle so its embedded web app iframe loads
 from the local proxy instead of https://app.devin.ai. Byte-level edit: the
 original file is never decoded, so no encoding can be damaged.
 
-    python webapp/install.py --app "D:\\AI\\Devin" [--port 5175] [--dry-run]
+    python webapp/install.py --app "<devin-install-dir>" [--port 5175] [--dry-run]
 
 The install directory is remembered in %LOCALAPPDATA%\\Devin\\zh-webapp.json.
 """
@@ -36,7 +36,7 @@ CANDIDATES = [
 
 
 def _registry_candidates():
-    """Devin may live anywhere (e.g. D:\\AI\\Devin).
+    """Devin may live anywhere (it is a portable Electron install).
 
     The app registers a `devin://` URL handler and a per-user "App Paths" entry,
     both of which carry the install directory.  Read them instead of guessing.

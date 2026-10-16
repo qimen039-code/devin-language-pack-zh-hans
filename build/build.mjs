@@ -163,6 +163,18 @@ const pkgVersion = pkg.version;
 const version = argOf('--version') || pkgVersion;
 const engine = pkg.engines?.vscode || cfg.engine;
 
+// package.json is the single source of truth for the version. repo.config.json
+// used to carry a duplicate that silently drifted out of sync, so it no longer
+// holds one. If anyone re-adds it (or a stale one survives), fail loudly rather
+// than ship a VSIX whose name disagrees with its own manifest.
+if (cfg.version !== undefined && cfg.version !== pkgVersion) {
+  console.error(
+    `ERROR: repo.config.json version "${cfg.version}" != package.json version "${pkgVersion}".\n` +
+    '       package.json is authoritative; remove the duplicate field from repo.config.json.'
+  );
+  process.exit(1);
+}
+
 // Source-only trees that must not be shipped inside the VSIX.
 // LICENSE / NOTICE.md are intentionally kept: the MIT notice must accompany copies.
 // `webapp` is the separate app.devin.ai overlay (proxy + byte patch); it is not

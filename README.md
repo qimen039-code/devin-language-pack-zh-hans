@@ -7,7 +7,8 @@
 自有界面同样显示中文，而不是回退到英文。
 
 - 语言：简体中文（`zh-cn`）
-- 目标产品：Devin Desktop（Cognition），基线版本 `1.126.0`
+- 目标产品：Devin Desktop（Cognition），上游基线 `1.126.0`
+- 当前版本：`1.126.1`（以 `package.json` 为唯一事实来源）
 - 兼容引擎：`^1.126.0`
 - 许可证：MIT（含上游 Microsoft MIT 内容，见 [`NOTICE.md`](NOTICE.md)）
 - 依赖：**零运行时依赖**，构建仅需 Node.js ≥ 16
@@ -71,7 +72,7 @@ Devin Desktop 的 **Sessions / Settings** 界面不是本地渲染的 —— 它
 
 ```bash
 # Windows（Devin 安装目录下的 CLI）
-"<Devin 安装目录>\bin\devin-desktop.cmd" --install-extension qimen039-code.devin-language-pack-zh-hans-1.126.0.vsix
+"<Devin 安装目录>\bin\devin-desktop.cmd" --install-extension qimen039-code.devin-language-pack-zh-hans-1.126.1.vsix
 
 # 若此前装过上游 ms-ceintl 语言包，先卸载，避免两个包争抢 zh-cn
 "<Devin 安装目录>\bin\devin-desktop.cmd" --uninstall-extension ms-ceintl.vscode-language-pack-zh-hans
@@ -82,7 +83,7 @@ Devin Desktop 的 **Sessions / Settings** 界面不是本地渲染的 —— 它
 ```bash
 git clone https://github.com/qimen039-code/devin-language-pack-zh-hans.git
 cd devin-language-pack-zh-hans
-node build/build.mjs          # 产出 dist/<publisher>.devin-language-pack-zh-hans-1.126.0.vsix
+node build/build.mjs          # 产出 dist/<publisher>.devin-language-pack-zh-hans-1.126.1.vsix
 node build/verify.mjs         # 结构 + 覆盖率自检
 ```
 
@@ -131,7 +132,7 @@ ZIP 中央目录 + 逐条 CRC32 双重校验，确保交付的包不会再出现
 ```
 .
 ├── package.json                              # 扩展清单（contributes.localizations 在此）
-├── repo.config.json                          # 构建配置（publisher / name / version / engine）
+├── repo.config.json                          # 构建配置（publisher / name / engine / repository）
 ├── languagepack.png
 ├── translations/
 │   ├── main.i18n.json                        # 核心 UI 字符串（上游基础 + 本项目覆盖）
@@ -164,9 +165,13 @@ ZIP 中央目录 + 逐条 CRC32 双重校验，确保交付的包不会再出现
 
 ## 版本策略
 
-语言包版本号与 Devin Desktop 的 VS Code 基线版本保持一致（当前 `1.126.0`），
-`engines.vscode` 亦同步为 `^1.126.0`。Devin 升级到新的 VS Code 基线后，
-需要同步更新上游译文并重新构建。
+- **语言包版本**：以 `package.json` 的 `version` 为唯一事实来源（当前 `1.126.1`），
+  由本项目在每次发布时递增。`repo.config.json` **刻意不重复该字段**，
+  以免出现两份会各自漂移的版本号。
+- **上游基线**：`MS-CEINTL.vscode-language-pack-zh-hans@1.126.0`。
+- **引擎范围**：`engines.vscode` 跟随 Devin Desktop 所用的 VS Code 基线，当前 `^1.126.0`。
+
+Devin 升级到新的 VS Code 基线后，需要同步更新上游译文并重新构建。
 
 ---
 

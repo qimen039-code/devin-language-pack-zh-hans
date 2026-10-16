@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Uninstall the Devin webapp zh-hans overlay: restore the original bundle.
 
-    python webapp/uninstall.py [--app "D:\\AI\\Devin"] [--keep-backup]
+    python webapp/uninstall.py [--app "<devin-install-dir>"] [--keep-backup]
 
 Restores resources/app/out/vs/sessions/sessions.desktop.main.js from the
 .zh-orig backup and puts the original product.json back, so the checksum table

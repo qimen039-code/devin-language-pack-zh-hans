@@ -6,6 +6,10 @@ dist/
 node_modules/
 npm-debug.log*
 
+# Python（webapp/ 下的补丁脚本会被 py_compile / import 生成字节码）
+__pycache__/
+*.py[cod]
+
 # 编辑器 / 系统
 .vscode/
 .idea/
