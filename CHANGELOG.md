@@ -2,6 +2,54 @@
 
 本项目的版本号跟随 Devin Desktop 的 VS Code 基线版本。
 
+---
+
+## Web 应用覆盖层 webapp/1.0.0 — 2026-10-16
+
+新增第二个交付物：`webapp/`（见 [`webapp/README.md`](webapp/README.md)）。
+**语言包（VSIX）本身未改动，因此 `package.json` 版本保持 `1.126.1` 不变。**
+
+### 背景
+
+此前收到的"漏译"键（`Local Settings`、`Data retention`、`Model provider API keys`
+以及 Devin Desktop 设置页整片文案）在本地安装树里**全树 0 命中**。定位结论是：
+Devin Desktop 的 Sessions / Settings 界面并非本地渲染，而是把
+`https://app.devin.ai` 装进沙箱 iframe 远程渲染，且该 Web 应用只带 en / ja / es / pt。
+
+因此这一层**无法**由 VS Code 语言包覆盖 —— 键不在 nls 表里，加多少条都不生效。
+本版本用「回环反向代理 + 字节级基址补丁」解决它。
+
+### 新增
+
+- `webapp/proxy.mjs`：零依赖反向代理（自实现 CONNECT 隧道、连接池、brotli/gzip/deflate
+  解压、字符串替换、`/api/*` 透明透传、WebSocket 隧道）。只绑定 `127.0.0.1`，
+  **不记录**任何请求头、Cookie、token 或正文。
+- `webapp/warmup-all.mjs`：资源图闭包式预热（入口 → 动态 `import()` 分片逐层收敛），
+  实测抓全 **1,830** 个分片、约 9 MB。
+- `webapp/install.py` / `webapp/uninstall.py`：字节级改写 iframe 基址（**仅 2 处**调用点），
+  并同步维护 `resources/app/product.json` 的 `checksums` 表
+  （`base64(SHA-256(file))` 去 `=` 填充）。安装目录自动探测：环境变量 → 状态文件 →
+  常见路径 → 注册表（`devin://` 协议处理器、App Paths）。
+- `webapp/dict-zh.json`（人工译源）+ `webapp/zh-hans.json`（构建产物，41 条生效）+
+  `build/webapp-dict.mjs`。
+- `/__zh/health`、`/__zh/keys` 诊断端点；`install.py --status`。
+
+### 关键设计
+
+- **鉴权走 URL 参数 + postMessage，不用 Cookie** → 无需自签 CA、无需 MITM、
+  不解密任何认证流量。
+- **缓存存上游原文，只有服务时才替换** → 词表覆盖率报告不会被自身替换结果污染，
+  且一条译文不可能被应用两次。
+- **同时匹配两种序列化形态**：`{"k":"English"}` 与 `` k:`English` ``（压缩后的裸键 +
+  模板字面量）。两种模式都带键名，因此不会误伤遥测事件标识符或普通代码。
+- 词表覆盖率实测 **41/41 命中、0 缺失**；离线自测（含逐字节窗口比对）**ALL PASS**。
+
+### 改动
+
+- `build/build.mjs`：打包排除表加入 `webapp`，避免覆盖层被打进 VSIX。
+
+---
+
 ## 1.126.1
 
 补齐 Devin fork 中仍是英文的界面字符串。

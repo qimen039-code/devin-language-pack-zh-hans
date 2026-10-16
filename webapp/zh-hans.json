@@ -1,0 +1,182 @@
+{
+  "backToOrganization": {
+    "en": "Back to organization",
+    "zh": "返回组织"
+  },
+  "cloudSettings": {
+    "en": "Cloud settings",
+    "zh": "云设置"
+  },
+  "newSession": {
+    "en": "New session",
+    "zh": "新会话"
+  },
+  "navigateHome": {
+    "en": "New session",
+    "zh": "新会话"
+  },
+  "sessions": {
+    "en": "Sessions",
+    "zh": "会话"
+  },
+  "codeSessions": {
+    "en": "Sessions",
+    "zh": "会话"
+  },
+  "coding": {
+    "en": "Sessions",
+    "zh": "会话"
+  },
+  "botsRailSessions": {
+    "en": "Sessions",
+    "zh": "会话"
+  },
+  "sessionsTitle": {
+    "en": "Sessions",
+    "zh": "会话"
+  },
+  "review": {
+    "en": "Review",
+    "zh": "审查"
+  },
+  "reviewLabel": {
+    "en": "Review",
+    "zh": "审查"
+  },
+  "automations": {
+    "en": "Automations",
+    "zh": "自动化"
+  },
+  "oncall": {
+    "en": "Oncall",
+    "zh": "待命"
+  },
+  "security": {
+    "en": "Security",
+    "zh": "安全"
+  },
+  "wiki": {
+    "en": "Wiki",
+    "zh": "Wiki"
+  },
+  "settingsLabel": {
+    "en": "Settings",
+    "zh": "设置"
+  },
+  "groupSettings": {
+    "en": "Settings",
+    "zh": "设置"
+  },
+  "enterpriseSetup": {
+    "en": "Settings",
+    "zh": "设置"
+  },
+  "desktopApp": {
+    "en": "Devin Desktop",
+    "zh": "Devin Desktop"
+  },
+  "productDevinDesktop": {
+    "en": "Devin Desktop",
+    "zh": "Devin Desktop"
+  },
+  "memberAnalyticsProductDesktop": {
+    "en": "Devin Desktop",
+    "zh": "Devin Desktop"
+  },
+  "localSettings": {
+    "en": "Local Settings",
+    "zh": "本地设置"
+  },
+  "models": {
+    "en": "Models",
+    "zh": "模型"
+  },
+  "sharing": {
+    "en": "Sharing",
+    "zh": "共享"
+  },
+  "dataRetention": {
+    "en": "Data retention",
+    "zh": "数据保留"
+  },
+  "modelProviderApiKeys": {
+    "en": "Model provider API keys",
+    "zh": "模型提供商 API 密钥"
+  },
+  "modelProviderApiKeysDescription": {
+    "en": "Manage your API keys for third-party model providers",
+    "zh": "管理第三方模型提供商的 API 密钥"
+  },
+  "desktopIndividualDescription": {
+    "en": "Manage your {{product}} API keys and privacy settings.",
+    "zh": "管理你的 {{product}} API 密钥与隐私设置。"
+  },
+  "display": {
+    "en": "Display",
+    "zh": "显示"
+  },
+  "displayLanguage": {
+    "en": "Display language",
+    "zh": "显示语言"
+  },
+  "displayLanguageDescription": {
+    "en": "Select your preferred language for the UI",
+    "zh": "选择你偏好的界面语言"
+  },
+  "enableAccessToOpenAIModelsWithDataRetention": {
+    "en": "Enable access to OpenAI models with data retention",
+    "zh": "允许访问带数据保留的 OpenAI 模型"
+  },
+  "enableAccessToOpenAIModelsWithDataRetentionDescription": {
+    "en": "Unlocks additional OpenAI models that require data retention for trust and safety verification.",
+    "zh": "解锁需要数据保留以进行信任与安全验证的额外 OpenAI 模型。"
+  },
+  "openaiCyberRetentionDescription": {
+    "en": "Unlocks additional OpenAI models that require data retention for trust and safety verification.<br /><br />OpenAI stores this data for up to 30 days and does not use it for model training or improvement. This setting applies only to OpenAI models.",
+    "zh": "解锁需要数据保留以进行信任与安全验证的额外 OpenAI 模型。<br /><br />OpenAI 最多保留这些数据 30 天，不会将其用于模型训练或改进。此设置仅适用于 OpenAI 模型。"
+  },
+  "allowModelProviderDataRetention": {
+    "en": "Allow model provider data retention",
+    "zh": "允许模型提供商保留数据"
+  },
+  "allowModelProviderDataRetentionDescription": {
+    "en": "Allow model providers to store data for up to 30 days for automated harm detection. Data will NOT be used for model training or improvements.",
+    "zh": "允许模型提供商最多保留数据 30 天，用于自动化危害检测。数据不会被用于模型训练或改进。"
+  },
+  "allowModelProviderDataRetentionDisabledDescription": {
+    "en": "Disabling this setting disables all routing to Fable-family models.",
+    "zh": "关闭此设置会停用所有到 Fable 系列模型的路由。"
+  },
+  "ultraModelProviderRetentionDescription": {
+    "en": "Some model providers may retain data for up to 30 days for automated harm detection. Data will NOT be used for model training or improvements.",
+    "zh": "部分模型提供商可能保留数据最多 30 天，用于自动化危害检测。数据不会被用于模型训练或改进。"
+  },
+  "enableAccessToAnthropicModelsWithDataRetention": {
+    "en": "Enable access to Anthropic models with data retention",
+    "zh": "允许访问带数据保留的 Anthropic 模型"
+  },
+  "enableAccessToAnthropicModelsWithDataRetentionDescription": {
+    "en": "Unlocks additional Anthropic models that require data retention for trust and safety verification, such as Claude Fable 5.",
+    "zh": "解锁需要数据保留以进行信任与安全验证的额外 Anthropic 模型，例如 Claude Fable 5。"
+  },
+  "accessEnabledForAnthropicModelsWithZeroDataRetention": {
+    "en": "Access enabled for Anthropic models with zero data retention",
+    "zh": "已为 Anthropic 模型启用零数据保留访问"
+  },
+  "allowDataRetention": {
+    "en": "Allow model provider data retention",
+    "zh": "允许模型提供商保留数据"
+  },
+  "allowDataRetentionDescription": {
+    "en": "Model providers may store data for up to 30 days for automated harm detection, never for training.",
+    "zh": "模型提供商可能保留数据最多 30 天，用于自动化危害检测，绝不用于训练。"
+  },
+  "navigateBack": {
+    "en": "Back",
+    "zh": "后退"
+  },
+  "navigateForward": {
+    "en": "Forward",
+    "zh": "前进"
+  }
+}

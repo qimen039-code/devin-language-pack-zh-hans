@@ -165,7 +165,9 @@ const engine = pkg.engines?.vscode || cfg.engine;
 
 // Source-only trees that must not be shipped inside the VSIX.
 // LICENSE / NOTICE.md are intentionally kept: the MIT notice must accompany copies.
-const excluded = new Set(['translations/overrides', 'build', 'vsix', 'dist', '.git', '.github', 'repo.config.json', '.gitignore']);
+// `webapp` is the separate app.devin.ai overlay (proxy + byte patch); it is not
+// extension code and must never end up inside the language pack.
+const excluded = new Set(['translations/overrides', 'webapp', 'build', 'vsix', 'dist', '.git', '.github', 'repo.config.json', '.gitignore']);
 const files = [];
 
 function walk(absDir, relDir) {
