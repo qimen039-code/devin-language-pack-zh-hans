@@ -1,106 +1,115 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Uninstall the Devin webapp zh-hans overlay: restore the original bundle.
+"""Uninstall the Devin webapp zh-hans overlay: restore the original bundles.
 
     python webapp/uninstall.py [--app "<devin-install-dir>"] [--keep-backup]
 
-Restores resources/app/out/vs/sessions/sessions.desktop.main.js from the
-.zh-orig backup and puts the original product.json back, so the checksum table
-is byte-identical to the shipped one again.
+Restores every patched bundle from its .zh-orig backup and rewrites the
+product.json checksum table from the restored files, so the table is exact
+again - no copy of product.json is kept, because a copy would have to be
+refreshed on install and would capture an already-half-patched file.
 """
 import argparse
-import base64
-import hashlib
-import io
-import json
 import os
 import shutil
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from install import (  # noqa: E402  (path is fixed up above)
-    BUNDLE, PRODUCT, ORIG_SUFFIX, STATE, PATTERN, find_app, load_state,
+from install import (  # noqa: WPS433 - sibling script, run from the repo
+    ORIG_SUFFIX,
+    PRODUCT,
+    b64_sha256,
+    build_targets,
+    bundle_path,
+    load_state,
+    patch_product_checksum,
+    read_checksum,
+    resolve_app,
+    save_state,
 )
-
-PATCHED_MARK = b'V6r("http://127.0.0.1:'
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--app")
-    ap.add_argument("--keep-backup", action="store_true")
+    ap.add_argument("--app", help="Devin install directory (contains resources/app)")
+    ap.add_argument("--port", type=int, default=5175)
+    ap.add_argument("--keep-backup", action="store_true",
+                    help="leave the .zh-orig backups in place")
     args = ap.parse_args()
 
-    app = os.path.abspath(args.app) if args.app else find_app(verbose=True)
+    app = resolve_app(args.app)
     if not app:
         print("ERROR: cannot locate the Devin install directory. Pass --app <dir>.")
         return 2
 
-    bundle = os.path.join(app, BUNDLE)
-    backup = bundle + ORIG_SUFFIX
-
-    if not os.path.exists(backup):
-        if os.path.isfile(bundle):
-            with open(bundle, "rb") as fh:
-                raw = fh.read()
-            if PATTERN in raw:
-                print("OK: not installed (bundle is original, no backup present).")
-                return 0
-            if PATCHED_MARK in raw:
-                print("ERROR: bundle is patched but the backup is missing.")
-                print("       Reinstall Devin, or re-run install.py to refresh both.")
-                return 3
-        print("ERROR: bundle not found: %s" % bundle)
-        return 3
-
-    with open(backup, "rb") as fh:
-        data = fh.read()
-    with open(bundle, "wb") as fh:
-        fh.write(data)
-    print("restored : %s (%d bytes)" % (bundle, len(data)))
-
-    with open(bundle, "rb") as fh:
-        check = fh.read()
-    ok = PATTERN in check and PATCHED_MARK not in check
-    print("verify   : %s" % ("PASS (original restored)" if ok else "FAIL"))
-    if not ok:
-        print("         backup did not look like the pristine bundle; aborting.")
-        return 4
-
-    if not args.keep_backup:
-        os.remove(backup)
-        print("removed  : %s" % backup)
-
+    targets = build_targets(args.port)
     product = os.path.join(app, PRODUCT)
-    prod_backup = product + ORIG_SUFFIX
-    digest = base64.b64encode(hashlib.sha256(data).digest()).decode("ascii").rstrip("=")
-    if os.path.exists(prod_backup):
-        shutil.copy2(prod_backup, product)
-        print("restored : %s" % product)
-    elif os.path.isfile(product):
-        print("note     : no product.json backup; leaving it as-is")
-    else:
-        print("note     : product.json not found")
-
-    if os.path.isfile(product):
-        with open(product, "rb") as fh:
-            pj = fh.read()
-        print("checksum : %s" % ("matches restored bundle" if digest.encode("ascii") in pj
-                                 else "MISMATCH - run install.py --status to inspect"))
-
-    if not args.keep_backup and os.path.exists(prod_backup):
-        os.remove(prod_backup)
-        print("removed  : %s" % prod_backup)
-
     state = load_state()
-    if state:
-        state["installed"] = False
-        os.makedirs(os.path.dirname(STATE), exist_ok=True)
-        with io.open(STATE, "w", encoding="utf-8") as fh:
-            json.dump(state, fh, ensure_ascii=False, indent=2)
+    orig_digests = dict(state.get("original_checksums") or {})
 
-    print("done. Devin will load https://app.devin.ai again on next start.")
+    print("app          : %s" % app)
+    restored_any = False
+    mismatches = []
+
+    for t in targets:
+        path = bundle_path(app, t["key"])
+        expect_total = sum(e[2] for e in t["edits"])
+        backup = path + ORIG_SUFFIX
+        print("--- %s" % t["key"])
+
+        if not os.path.isfile(path):
+            print("    ERROR: bundle missing: %s" % path)
+            return 2
+
+        with open(path, "rb") as fh:
+            data = fh.read()
+        still_patched = sum(data.count(e[1].encode("ascii")) for e in t["edits"])
+        original_present = sum(data.count(e[0]) for e in t["edits"])
+
+        if original_present >= expect_total and still_patched == 0:
+            print("    already original (%d pattern(s)) - nothing to restore" % original_present)
+        elif not os.path.isfile(backup):
+            print("    ERROR: patched but no backup at %s - refusing to guess." % backup)
+            return 3
+        else:
+            shutil.copy2(backup, path)
+            restored_any = True
+            with open(path, "rb") as fh:
+                data = fh.read()
+            original_present = sum(data.count(e[0]) for e in t["edits"])
+            print("    restored from backup (%d pattern(s) back)" % original_present)
+
+        digest = b64_sha256(data)
+        want = orig_digests.get(t["key"])
+        if want and want != digest:
+            mismatches.append((t["key"], want, digest))
+        if os.path.isfile(product):
+            old, note = patch_product_checksum(product, t["key"], digest, False)
+            print("    checksum %-42s %s (%s)" % (t["key"], digest[:16] + "...", note))
+            if want:
+                print("    shipped  %-42s %s" % (t["key"], want[:16] + "..."))
+
+        if not args.keep_backup and os.path.isfile(backup):
+            os.remove(backup)
+            print("    backup removed")
+
+    # Legacy installs (before product.json stopped being file-backed-up) may
+    # have left one behind.  It is stale by construction; drop it.
+    legacy = product + ORIG_SUFFIX
+    if os.path.isfile(legacy):
+        os.remove(legacy)
+        print("legacy backup: removed %s" % legacy)
+
+    if mismatches:
+        print("\nWARNING: restored bundles do not hash to the digests recorded at install time.")
+        for key, want, got in mismatches:
+            print("  %s\n    recorded %s\n    restored %s" % (key, want, got))
+        print("  (expected if Devin was updated since the overlay was installed)")
+
+    state.update({"app": app, "installed": False})
+    state.pop("files", None)
+    save_state(state)
+
+    print("\nverdict      : %s" % ("RESTORED" if restored_any else "not installed"))
     return 0
 
 

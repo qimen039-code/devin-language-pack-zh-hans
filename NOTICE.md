@@ -49,7 +49,9 @@ license information.
 
 它解决的是语言包**结构上够不到**的一层：Devin Desktop 的 Sessions / Settings 界面
 其实是 `https://app.devin.ai` 这个远程 Web 应用在沙箱 iframe 里渲染的，
-字符串不在 VS Code 的 nls 键表里。
+字符串不在 VS Code 的 nls 键表里。构造该 iframe 的代码在安装树里存在**两份
+彼此独立的副本**（`sessions.desktop.main.js` 与 `workbench.desktop.main.js`），
+补丁需同时覆盖两者。
 
 | 路径 | 说明 |
 | --- | --- |

@@ -26,13 +26,40 @@ Devin Desktop 的 Sessions / Settings 界面并非本地渲染，而是把
   **不记录**任何请求头、Cookie、token 或正文。
 - `webapp/warmup-all.mjs`：资源图闭包式预热（入口 → 动态 `import()` 分片逐层收敛），
   实测抓全 **1,830** 个分片、约 9 MB。
-- `webapp/install.py` / `webapp/uninstall.py`：字节级改写 iframe 基址（**仅 2 处**调用点），
-  并同步维护 `resources/app/product.json` 的 `checksums` 表
-  （`base64(SHA-256(file))` 去 `=` 填充）。安装目录自动探测：环境变量 → 状态文件 →
-  常见路径 → 注册表（`devin://` 协议处理器、App Paths）。
+- `webapp/install.py` / `webapp/uninstall.py`：字节级改写 iframe 基址
+  （**2 个 bundle、合计 4 处**调用点），并同步维护 `resources/app/product.json` 的
+  `checksums` 表（`base64(SHA-256(file))` 去 `=` 填充）。安装目录自动探测：
+  环境变量 → 状态文件 → 常见路径 → 注册表（`devin://` 协议处理器、App Paths）。
 - `webapp/dict-zh.json`（人工译源）+ `webapp/zh-hans.json`（构建产物，41 条生效）+
   `build/webapp-dict.mjs`。
 - `/__zh/health`、`/__zh/keys` 诊断端点；`install.py --status`。
+
+### 根因修正（本轮追加）
+
+初版只改了 `out/vs/sessions/sessions.desktop.main.js` 的 2 处调用点，实测**界面仍为英文**。
+根因是构造该 iframe 的代码在安装树里存在**两份彼此独立的副本**：
+
+| bundle | 基址构造器 | 调用点 | 归属 |
+| --- | --- | --- | --- |
+| `out/vs/sessions/sessions.desktop.main.js` | `V6r()` | `V6r(But(this._authService,this._devinService),` ×2 | Sessions 窗口 |
+| `out/vs/workbench/workbench.desktop.main.js` | `oSe()` | `oSe(QC(this._authService,this._devinService),` ×2<br>`oSe(this._devinService.webUrl,` ×1 | **主窗口** |
+
+**主窗口加载的是 `workbench.desktop.main.js`**（入口
+`out/vs/code/electron-browser/workbench/workbench.js`），因此只补 sessions 那一份
+不产生任何可见效果。`oSe` 是 `V6r` 的等价物，`QC` 是 `But` 的等价物，
+`product.json` 的 `checksums` 表同时覆盖这两个文件，两处都必须同步。
+
+同时修掉三个会误导使用者的问题：
+
+- `--status` 的 `patched : N / M` 逐 edit 计数，而 workbench 的两处 edit 共用同一
+  替换串 → 显示 `6 / 3`。改为按**去重后的替换串**计数。
+- `product.json` 原先做文件级 `.zh-orig` 备份，且每次调用都刷新 → 第二次编辑会把
+  「半打补丁」的中间态覆盖成"原版"。改为**不备份**，卸载时按还原后的 bundle 重算。
+- `repo.config.json` 里冗余的 `version` 与 `package.json` 漂移（构建脚本从不读它），
+  已删除并在 `build/build.mjs` 加硬守卫；README 里 `…-1.126.0.vsix` 的示例一并修正。
+
+`oSe(this.devinService.webUrl,`（**无下划线**，用于 PR-review webview）**刻意不打** ——
+它依赖绑定在 app origin 上的按源请求头鉴权，换基址会破坏其认证。
 
 ### 关键设计
 
