@@ -1,0 +1,38 @@
+MIT License
+===========
+
+Copyright (c) 2026 qimen039-code
+——本仓库中由本项目新增的简体中文翻译、构建脚本与文档。
+
+-------------------------------------------------------------------------
+
+本仓库同时包含源自 Microsoft vscode-loc 项目的简体中文本地化内容
+（translations/main.i18n.json 的基础部分，以及 translations/extensions/ 下的
+93 个内置扩展翻译文件）。该部分内容的版权归 Microsoft Corporation 所有，
+并同样以 MIT 许可证授权。为满足 MIT 许可证对保留版权声明的要求，特此原文列出：
+
+    Copyright (c) Microsoft Corporation. All rights reserved.
+    Licensed under the MIT License. See License.txt in the project root for
+    license information.
+
+上游项目：https://github.com/microsoft/vscode-loc
+
+-------------------------------------------------------------------------
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
