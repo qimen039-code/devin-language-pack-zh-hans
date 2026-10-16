@@ -1,0 +1,9 @@
+{
+  "publisher": "qimen039-code",
+  "name": "devin-language-pack-zh-hans",
+  "displayName": "Chinese (Simplified) (简体中文) Language Pack for Devin",
+  "description": "Devin Desktop 专用简体中文本地化包：在 VS Code 官方 zh-hans 语言包基础上，补齐 667 条 Windsurf/Devin fork 专有界面字符串。",
+  "version": "1.126.0",
+  "engine": "^1.126.0",
+  "repository": "https://github.com/qimen039-code/devin-language-pack-zh-hans"
+}
